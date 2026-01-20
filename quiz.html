@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>O/X 퀴즈</title>
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="description" content="O/X 퀴즈 학습 앱">
+    <link rel="manifest" href="./manifest.json">
+
+    <!-- iOS Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="O/X 퀴즈">
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
+
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #f1f5f9;
+        }
+
+        .ox-btn {
+            transition: transform 0.1s;
+        }
+
+        .ox-btn:active {
+            transform: scale(0.95);
+        }
+
+        .blue-text {
+            color: #2563eb;
+        }
+
+        /* 맞았을 때 파란색 */
+        .red-text {
+            color: #dc2626;
+        }
+
+        /* 틀렸을 때 빨간색 */
+    </style>
+</head>
+
+<body class="flex flex-col min-h-screen">
+
+    <div id="setup-screen" class="p-8 flex-1 flex flex-col justify-center items-center">
+        <div class="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl text-center">
+            <div class="mb-6 text-5xl">📚</div>
+            <h1 class="text-2xl font-black mb-2 text-slate-800">퀴즈 업로드</h1>
+            <p class="text-sm text-slate-500 mb-8 leading-relaxed">
+                '.xlsx' 파일을 선택해주세요.<br>
+                (A:단원, B:문제, C:정답, D:해설)
+            </p>
+
+            <label class="block">
+                <span class="sr-only">파일 선택</span>
+                <input type="file" id="file-input" accept=".xlsx, .xls, .csv" class="block w-full text-sm text-slate-500
+                    file:mr-4 file:py-3 file:px-6
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-indigo-50 file:text-indigo-700
+                    hover:file:bg-indigo-100 cursor-pointer" />
+            </label>
+
+            <div id="file-info" class="mt-6 text-sm text-indigo-600 font-bold hidden">
+                파일이 로드되었습니다!
+                <button onclick="startQuiz()"
+                    class="w-full mt-4 bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-indigo-200">퀴즈
+                    시작하기</button>
+            </div>
+
+            <!-- 업로드된 파일 목록 -->
+            <div id="file-history" class="mt-8">
+                <h3 class="text-sm font-bold text-slate-600 mb-3">목록</h3>
+                <div id="file-list" class="space-y-2 max-h-48 overflow-y-auto">
+                    <!-- 파일 목록이 여기에 표시됩니다 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="quiz-screen" class="hidden flex-1 flex flex-col p-6 max-w-md mx-auto w-full">
+        <div class="flex justify-between items-center mb-8">
+            <div class="bg-indigo-100 px-3 py-1 rounded-full">
+                <span id="progress" class="text-indigo-700 text-sm font-bold">1 / 50</span>
+            </div>
+            <button onclick="location.reload()" class="text-xs text-slate-400">메인으로</button>
+        </div>
+
+        <div class="flex-1 flex flex-col justify-center mb-8 min-h-[200px]">
+            <p id="chapter" class="text-sm font-bold text-indigo-400 mb-2"></p>
+            <h2 id="question" class="text-2xl font-extrabold text-slate-800 leading-snug break-keep"></h2>
+        </div>
+
+        <div id="ox-container" class="grid grid-cols-2 gap-6 mb-10">
+            <button onclick="checkAnswer('O')"
+                class="ox-btn bg-white border-b-4 border-slate-200 py-10 rounded-3xl text-6xl font-black text-blue-500 shadow-lg">O</button>
+            <button onclick="checkAnswer('X')"
+                class="ox-btn bg-white border-b-4 border-slate-200 py-10 rounded-3xl text-6xl font-black text-red-500 shadow-lg">X</button>
+        </div>
+
+        <div id="explanation-container" class="hidden">
+            <div id="result-badge" class="text-center text-4xl font-black mb-6"></div>
+            <div class="bg-white p-6 rounded-3xl shadow-inner border border-slate-100">
+                <p class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">Description</p>
+                <p id="explanation-text" class="text-slate-700 leading-relaxed font-medium"></p>
+                <button onclick="nextQuestion()"
+                    class="w-full mt-8 bg-slate-900 text-white py-4 rounded-2xl font-bold text-lg">다음 문제로 ></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="result-screen" class="hidden p-6 max-w-md mx-auto w-full">
+        <div class="text-center mb-10 mt-6">
+            <h1 class="text-2xl font-black text-slate-800 mb-2">학습 완료!</h1>
+            <p class="text-6xl font-black text-indigo-600" id="final-score">0 / 50</p>
+        </div>
+
+        <div id="capture-area" class="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
+            <div class="bg-indigo-600 text-white p-4 text-center text-sm font-bold flex items-center justify-between">
+                <span class="flex-1">오답 노트</span>
+                <button onclick="downloadWrongAnswersImage()"
+                    class="bg-white text-indigo-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-50 transition-colors">
+                    📥 이미지로 저장
+                </button>
+            </div>
+            <div class="max-h-[50vh] overflow-y-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <tbody id="wrong-questions-list"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <button onclick="startQuiz()"
+            class="w-full mt-8 bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100">한 번 더 풀기
+            (랜덤 50문)</button>
+        <button onclick="location.reload()" class="w-full mt-3 text-slate-400 py-2 text-sm font-medium">다른 파일
+            업로드</button>
+    </div>
+
+    <script>
+        let allData = [];
+        let quizSet = [];
+        let currentIndex = 0;
+        let score = 0;
+        let wrongAnswers = [];
+
+        // 페이지 로드 시 파일 목록 표시 및 기본 파일 로드
+        window.addEventListener('DOMContentLoaded', function () {
+            // Service Worker 등록 (PWA)
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(reg => console.log('Service Worker 등록 성공:', reg))
+                    .catch(err => console.log('Service Worker 등록 실패:', err));
+            }
+
+            // 기본 파일 로드
+            loadDefaultFiles();
+            displayFileHistory();
+        });
+
+        // 기본 파일 로드 (quiz 폴더의 3개 파일)
+        async function loadDefaultFiles() {
+            const defaultFiles = [
+                { name: '경영.xlsx', path: './경영.xlsx' },
+                { name: '상법.xlsx', path: './상법.xlsx' },
+                { name: '회계.xlsx', path: './회계.xlsx' }
+            ];
+
+            const history = JSON.parse(localStorage.getItem('quizFileHistory') || '[]');
+
+            // 기본 파일이 이미 로드되어 있는지 확인
+            const hasDefaults = defaultFiles.every(df =>
+                history.some(h => h.name === df.name && h.isDefault)
+            );
+
+            if (hasDefaults) {
+                return; // 이미 로드됨
+            }
+
+            // 기본 파일 로드
+            for (const file of defaultFiles) {
+                try {
+                    const response = await fetch(file.path);
+                    const arrayBuffer = await response.arrayBuffer();
+                    const data = new Uint8Array(arrayBuffer);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    let lastChapter = '기타';
+                    const quizData = json.filter(row => row.length >= 2).map(row => {
+                        if (row[0] && String(row[0]).trim() !== '') {
+                            lastChapter = String(row[0]).trim();
+                        }
+                        return {
+                            chapter: lastChapter,
+                            q: row[1],
+                            a: String(row[2]).trim().toUpperCase(),
+                            desc: row[3] || '-'
+                        };
+                    });
+
+                    // 기본 파일로 저장 (isDefault 플래그 추가)
+                    saveFileHistory(file.name, quizData, true);
+                } catch (err) {
+                    console.log(`기본 파일 로드 실패: ${file.name}`, err);
+                }
+            }
+        }
+
+
+        // 파일 기록 저장 (퀴즈 데이터 포함)
+        function saveFileHistory(fileName, quizData, isDefault = false) {
+            let history = JSON.parse(localStorage.getItem('quizFileHistory') || '[]');
+            const timestamp = new Date().toLocaleString('ko-KR');
+
+            // 중복 제거 (같은 파일명이 있으면 제거)
+            history = history.filter(item => item.name !== fileName);
+
+            // 새 파일을 맨 앞에 추가 (퀴즈 데이터 포함)
+            const fileEntry = {
+                name: fileName,
+                timestamp: timestamp,
+                data: quizData
+            };
+
+            if (isDefault) {
+                fileEntry.isDefault = true;
+            }
+
+            history.unshift(fileEntry);
+
+            // 최대 10개까지만 저장
+            if (history.length > 10) {
+                history = history.slice(0, 10);
+            }
+
+            localStorage.setItem('quizFileHistory', JSON.stringify(history));
+            displayFileHistory();
+        }
+
+        // 파일 기록 표시
+        function displayFileHistory() {
+            const history = JSON.parse(localStorage.getItem('quizFileHistory') || '[]');
+            const listContainer = document.getElementById('file-list');
+
+            if (history.length === 0) {
+                listContainer.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">아직 업로드한 파일이 없습니다.</p>';
+                return;
+            }
+
+            listContainer.innerHTML = history.map((item, index) => {
+                const fileName = item.name.replace('.xlsx', '');
+
+                if (item.isDefault) {
+                    // 기본 파일: 날짜 표시 없음, 삭제 버튼 없음
+                    return `
+                        <div class="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg text-xs hover:bg-slate-100 transition-colors cursor-pointer" onclick="loadQuizFromHistory(${index})">
+                            <p class="font-semibold text-slate-700">${fileName}</p>
+                        </div>
+                    `;
+                } else {
+                    // 사용자 업로드 파일: 날짜 표시, 삭제 버튼 있음
+                    return `
+                        <div class="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg text-xs hover:bg-slate-100 transition-colors">
+                            <div class="flex-1 min-w-0 cursor-pointer" onclick="loadQuizFromHistory(${index})">
+                                <p class="font-semibold text-slate-700 truncate">${item.name}</p>
+                                <p class="text-slate-400 text-[10px] mt-0.5">${item.timestamp}</p>
+                            </div>
+                            <button onclick="event.stopPropagation(); deleteFileHistory(${index})" class="ml-2 text-red-400 hover:text-red-600 font-bold text-sm">×</button>
+                        </div>
+                    `;
+                }
+            }).join('');
+        }
+
+        // 파일 기록에서 퀴즈 불러오기
+        function loadQuizFromHistory(index) {
+            const history = JSON.parse(localStorage.getItem('quizFileHistory') || '[]');
+            if (history[index] && history[index].data) {
+                allData = history[index].data;
+                document.getElementById('file-info').classList.remove('hidden');
+                // 자동으로 퀴즈 시작
+                startQuiz();
+            }
+        }
+
+        // 파일 기록 삭제
+        function deleteFileHistory(index) {
+            let history = JSON.parse(localStorage.getItem('quizFileHistory') || '[]');
+            history.splice(index, 1);
+            localStorage.setItem('quizFileHistory', JSON.stringify(history));
+            displayFileHistory();
+        }
+
+        // 엑셀 파일 읽기 처리
+        document.getElementById('file-input').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+
+            reader.onload = function (e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+
+                // 데이터를 배열로 변환
+                const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                // 병합된 셀 처리를 위한 변수
+                let lastChapter = '기타';
+
+                // 데이터 파싱 (병합된 셀 처리)
+                allData = json.filter(row => row.length >= 2).map(row => {
+                    // A열(단원)이 비어있으면 이전 단원명 사용
+                    if (row[0] && String(row[0]).trim() !== '') {
+                        lastChapter = String(row[0]).trim();
+                    }
+
+                    return {
+                        chapter: lastChapter,
+                        q: row[1],
+                        a: String(row[2]).trim().toUpperCase(),
+                        desc: row[3] || '-'
+                    };
+                });
+
+                if (allData.length > 0) {
+                    document.getElementById('file-info').classList.remove('hidden');
+                    // 파일 기록 저장 (퀴즈 데이터 포함)
+                    saveFileHistory(file.name, allData);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function startQuiz() {
+            const count = Math.min(allData.length, 50);
+            quizSet = [...allData].sort(() => Math.random() - 0.5).slice(0, count);
+            currentIndex = 0;
+            score = 0;
+            wrongAnswers = [];
+
+            document.getElementById('setup-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('quiz-screen').classList.remove('hidden');
+            showQuestion();
+        }
+
+        function showQuestion() {
+            const q = quizSet[currentIndex];
+            document.getElementById('progress').innerText = `${currentIndex + 1} / ${quizSet.length}`;
+            document.getElementById('chapter').innerText = q.chapter;
+            document.getElementById('question').innerText = q.q;
+            document.getElementById('ox-container').classList.remove('hidden');
+            document.getElementById('explanation-container').classList.add('hidden');
+            window.scrollTo(0, 0);
+        }
+
+        function checkAnswer(userPick) {
+            const q = quizSet[currentIndex];
+            const isCorrect = userPick === q.a;
+
+            const badge = document.getElementById('result-badge');
+            document.getElementById('ox-container').classList.add('hidden');
+            document.getElementById('explanation-container').classList.remove('hidden');
+            document.getElementById('explanation-text').innerText = q.desc;
+
+            if (isCorrect) {
+                score++;
+                badge.innerText = "정답";
+                badge.className = "text-center text-3xl font-black mb-6 blue-text"; // 파란색
+            } else {
+                badge.innerText = "오답";
+                badge.className = "text-center text-3xl font-black mb-6 red-text"; // 빨간색
+                wrongAnswers.push(q);
+            }
+        }
+
+        function nextQuestion() {
+            currentIndex++;
+            if (currentIndex < quizSet.length) {
+                showQuestion();
+            } else {
+                showResult();
+            }
+        }
+
+        function showResult() {
+            document.getElementById('quiz-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+            document.getElementById('final-score').innerText = `${score} / ${quizSet.length}`;
+
+            const listContainer = document.getElementById('wrong-questions-list');
+            listContainer.innerHTML = '';
+
+            if (wrongAnswers.length === 0) {
+                listContainer.innerHTML = '<tr><td class="p-8 text-center text-slate-500 font-bold text-sm">틀린 문제가 없습니다. 완벽합니다! 👏</td></tr>';
+            } else {
+                wrongAnswers.forEach((q, idx) => {
+                    const row = `
+                        <tr class="border-b border-slate-100">
+                            <td class="p-4 bg-slate-50 font-black text-indigo-400 align-top text-center" style="width: 50px">${idx + 1}</td>
+                            <td class="p-4">
+                                <div class="font-bold text-slate-800 mb-2 break-keep text-sm">${q.q}</div>
+                                <div class="text-slate-500 text-xs leading-relaxed"><span class="font-bold text-red-500 text-xs">[정답: ${q.a}]</span> ${q.desc}</div>
+                            </td>
+                        </tr>
+                    `;
+                    listContainer.innerHTML += row;
+                });
+            }
+            window.scrollTo(0, 0);
+        }
+
+        // 오답노트 이미지로 저장
+        function downloadWrongAnswersImage() {
+            const captureArea = document.getElementById('capture-area');
+            const scrollContainer = captureArea.querySelector('.max-h-\\[50vh\\]');
+
+            // 스크롤 제한 임시 해제 (전체 내용 캡처를 위해)
+            const originalMaxHeight = scrollContainer.style.maxHeight;
+            const originalOverflow = scrollContainer.style.overflow;
+            scrollContainer.style.maxHeight = 'none';
+            scrollContainer.style.overflow = 'visible';
+
+            // html2canvas로 캡처
+            html2canvas(captureArea, {
+                backgroundColor: '#ffffff',
+                scale: 2, // 고해상도
+                logging: false,
+                useCORS: true,
+                windowHeight: captureArea.scrollHeight + 100
+            }).then(canvas => {
+                // 원래 스타일 복원
+                scrollContainer.style.maxHeight = originalMaxHeight;
+                scrollContainer.style.overflow = originalOverflow;
+
+                // 캔버스를 이미지로 변환
+                const link = document.createElement('a');
+                const timestamp = new Date().toLocaleString('ko-KR').replace(/[/:]/g, '-').replace(/\s/g, '_');
+                link.download = `오답노트_${timestamp}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            }).catch(err => {
+                // 에러 발생 시에도 원래 스타일 복원
+                scrollContainer.style.maxHeight = originalMaxHeight;
+                scrollContainer.style.overflow = originalOverflow;
+
+                console.error('이미지 저장 실패:', err);
+                alert('이미지 저장에 실패했습니다.');
+            });
+        }
+    </script>
+</body>
+
+</html>
