@@ -96,7 +96,7 @@
         </div>
 
         <div class="flex-1 flex flex-col justify-center mb-8 min-h-[200px]">
-            <p id="chapter" class="text-sm font-bold text-indigo-400 mb-2 whitespace-nowrap overflow-x-auto"></p>
+            <p id="chapter" class="text-sm font-bold text-indigo-400 mb-2"></p>
             <h2 id="question" class="text-2xl font-extrabold text-slate-800 leading-snug break-keep"></h2>
         </div>
 
@@ -362,7 +362,8 @@
         function showQuestion() {
             const q = quizSet[currentIndex];
             document.getElementById('progress').innerText = `${currentIndex + 1} / ${quizSet.length}`;
-            document.getElementById('chapter').innerText = q.chapter;
+            // 줄바꿈 제거하여 한 줄로 표시
+            document.getElementById('chapter').innerText = q.chapter.replace(/[\r\n]+/g, ' ');
             document.getElementById('question').innerText = q.q;
             document.getElementById('ox-container').classList.remove('hidden');
             document.getElementById('explanation-container').classList.add('hidden');
